@@ -1,5 +1,6 @@
 import {NextResponse} from 'next/server' // Import NextResponse from Next.js for handling responses
-import OpenAI from 'openai' // Import OpenAI library for interacting with the OpenAI API
+// import OpenAI from 'openai' // Import OpenAI library for interacting with the OpenAI API
+import { HfInference } from '@huggingface/inference'
 
 // System prompt for the AI, providing guidelines on how to respond to users
 const systemPrompt = `You are the customer support bot for HeadstarterAI, a platform that provides AI-powered interviews for software engineering (SWE) job seekers. Your role is to assist users with questions about the platform, troubleshoot issues, and provide guidance on how to make the most of HeadstarterAI. Here are some key aspects to keep in mind:
@@ -26,6 +27,7 @@ Remember, your goal is to enhance the user experience by being helpful, empathet
 
 // POST function to handle incoming requests
 export async function POST(req) {
+  /*
   const openai = new OpenAI() // Create a new instance of the OpenAI client
   const data = await req.json() // Parse the JSON body of the incoming request
 
@@ -64,4 +66,58 @@ export async function POST(req) {
   })
 
   return new NextResponse(stream) // Return the stream as the response
+  */
+
+  // using hugging face model instead
+  const hf = new HfInference(process.env.HUGGING_FACE_API_KEY); // Initialize Hugging Face inference with your API key
+  const data = await req.json() // Parse the JSON body of the incoming request
+
+  /*
+  const messages = [
+    {
+      role: 'system',
+      content: systemPrompt
+    },
+    ...data
+  ].map(msg => msg.content).join('\n'); // Concatenate messages into one string for Hugging Face
+  */
+
+  const messages = data.map(msg=> msg.content).join('\n');
+  let response = '';
+
+  // simulate streamng 
+  const simulateStreaming = async (messages) => {
+    let partialResult = '';
+    
+    while (true) {
+      const result = await hf.textGeneration({
+        model: 'microsoft/DialoGPT-medium', // Replace with the model name you want to use
+        inputs: messages,
+        parameters: {
+          max_new_tokens: 200,
+          do_sample: true,
+          temperature: 0.7,
+        }
+      });
+      partialResult += result.generated_text;
+      
+      // Simulate end of response or use conditions to end loop
+      if (result.generated_text.endsWith('\n')) { // Example condition
+        break;
+      }
+      
+      // Add delay or condition to simulate streaming
+      await new Promise(res => setTimeout(res, 1000));
+    }
+
+    return partialResult;
+  };
+  
+  try {
+    const text = await simulateStreaming(messages);
+    return NextResponse.json({ role: 'assistant', content: text });
+  } catch (error) {
+    console.error('Error:', error);
+    return NextResponse.json({ role: 'assistant', content: "I'm sorry, but I encountered an error. Please try again later." });
+  }
 }
